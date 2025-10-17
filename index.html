@@ -67,7 +67,7 @@
         <!-- Header -->
         <header class="mb-8">
             <h1 class="text-4xl font-bold text-gray-900">Autonomous Financial Agent</h1>
-            <p class="text-gray-600 mt-2">Your personal AI agent for smarter financial decisions.</p>
+            <p class="text-gray-600 mt-2">Your AI agent for gig workers, adapting to variable income and spending.</p>
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -184,11 +184,34 @@
                 let adviceList = [];
 
                 const expenseTransactions = transactions.filter(t => t.type === 'expense');
-                const incomeTransactions = transactions.filter(t => t.type === 'income');
+                const incomeTransactions = transactions.filter(t => t.type === 'income').sort((a,b) => a.date - b.date);
                 const totalIncome = incomeTransactions.reduce((acc, t) => acc + t.amount, 0);
                 const totalExpenses = expenseTransactions.reduce((acc, t) => acc + t.amount, 0);
                 const balance = totalIncome - totalExpenses;
 
+                // --- NEW: Income Variability Analysis ---
+                if (incomeTransactions.length >= 3) {
+                    const incomeAmounts = incomeTransactions.map(t => t.amount);
+                    const incomeStdDev = ss.standardDeviation(incomeAmounts);
+                    const incomeMean = ss.mean(incomeAmounts);
+                    
+                    if (incomeMean > 0 && (incomeStdDev / incomeMean) > 0.75) { // Coefficient of variation > 75%
+                        const lastIncome = incomeTransactions[incomeTransactions.length - 1];
+                        const suggestedAmount = Math.floor(lastIncome.amount * 0.25); // Suggest setting aside 25%
+                        if (suggestedAmount > 20) {
+                            adviceList.push({
+                                type: 'action',
+                                icon: 'fa-file-invoice-dollar',
+                                color: 'text-purple-500',
+                                text: `Your income seems irregular. The agent suggests setting aside part of your recent <strong>${formatCurrency(lastIncome.amount)}</strong> payment for future bills.`,
+                                actionText: `Set Aside ${formatCurrency(suggestedAmount)}`,
+                                action: () => executeSetAside(suggestedAmount, 'Bills Fund')
+                            });
+                        }
+                    }
+                }
+
+                // --- Existing Spending Analysis ---
                 if (expenseTransactions.length < 5) {
                     adviceContainer.innerHTML = `<p class="text-gray-500">Add at least ${5 - expenseTransactions.length} more expense(s) to enable agent actions.</p>`;
                 } else {
@@ -215,7 +238,6 @@
                     });
                 }
                 
-                // New Actionable Insight
                 const foodExpenses = expenseTransactions.filter(t => t.category === 'food');
                 const totalFoodSpending = foodExpenses.reduce((sum, t) => sum + t.amount, 0);
                 if (totalFoodSpending > 200) {
@@ -229,7 +251,7 @@
                     });
                 }
 
-
+                // --- Render all advice ---
                 if (adviceList.length > 0) {
                      adviceList.forEach(advice => {
                         const adviceEl = document.createElement('div');
@@ -249,7 +271,6 @@
                                     <button id="${actionId}" class="btn btn-secondary text-sm">${advice.actionText}</button>
                                 </div>
                             `;
-                            // Use a timeout to ensure the element is in the DOM before adding listener
                             setTimeout(() => {
                                 document.getElementById(actionId).addEventListener('click', advice.action);
                             }, 0);
@@ -266,24 +287,26 @@
             // --- Agent Action Functions (Simulated) ---
             function executeSavingsTransfer(amount) {
                 console.log(`AGENT ACTION: Transferring ${formatCurrency(amount)} to savings.`);
-                
-                // Simulate the action by adding two transactions
                 const savingsTransaction = {
                     id: Date.now(),
                     description: 'Transfer to Savings', amount, type: 'expense',
                     category: 'other', date: new Date()
                 };
                 transactions.push(savingsTransaction);
-
-                const savingsDeposit = {
-                    id: Date.now() + 1,
-                    description: 'Deposit from Checking', amount, type: 'income',
-                    category: null, date: new Date()
-                };
-                // In a real app this would go to a different account, here we just net it out.
-                // For this simulation, we'll just show the expense.
-                
                 alert(`Agent Action: ${formatCurrency(amount)} moved to savings!`);
+                updateUI();
+            }
+
+            // --- NEW Agent Action ---
+            function executeSetAside(amount, fundName) {
+                console.log(`AGENT ACTION: Setting aside ${formatCurrency(amount)} for ${fundName}.`);
+                const setAsideTransaction = {
+                    id: Date.now(),
+                    description: `Transfer to ${fundName}`, amount, type: 'expense',
+                    category: 'other', date: new Date()
+                };
+                transactions.push(setAsideTransaction);
+                alert(`Agent Action: ${formatCurrency(amount)} has been set aside for your ${fundName}.`);
                 updateUI();
             }
             
@@ -372,3 +395,4 @@
     </script>
 </body>
 </html>
+
